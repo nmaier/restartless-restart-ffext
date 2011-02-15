@@ -76,8 +76,8 @@ function addMenuItem(win) {
   // add the new menuitem to File menu
   let (restartMI = win.document.createElementNS(NS_XUL, "menuitem")) {
     restartMI.setAttribute("id", fileMenuitemID);
-    restartMI.setAttribute("label", "Restart");
-    restartMI.setAttribute("accesskey", "R");
+    restartMI.setAttribute("label", _("restart"));
+    restartMI.setAttribute("accesskey", _("restart.accesskey"));
     restartMI.setAttribute("key", keyID);
     restartMI.addEventListener("command", restart, true);
 
@@ -144,9 +144,15 @@ function startup(data) AddonManager.getAddonByID(data.id, function(addon) {
   var prefs = PREF_BRANCH;
   include(addon.getResourceURI("includes/utils.js").spec);
   logo = addon.getResourceURI("images/refresh_16.png").spec;
-  watchWindows(main);
-  prefs = prefs.QueryInterface(Components.interfaces.nsIPrefBranch2);
-  prefs.addObserver("", PREF_OBSERVER, false);
-  unload(function() prefs.removeObserver("", PREF_OBSERVER));
+
+  // _.init is loaded asynchronously
+  // as watchWindows and the preference bits depend on l10n
+  // delay the rest of the start up until _ is done initializing
+  _.init("rr.properties", addon, function() {
+    watchWindows(main);
+    prefs = prefs.QueryInterface(Components.interfaces.nsIPrefBranch2);
+    prefs.addObserver("", PREF_OBSERVER, false);
+    unload(function() prefs.removeObserver("", PREF_OBSERVER));
+  });
 });
 function shutdown(data, reason) { if (reason !== APP_SHUTDOWN) unload(); }

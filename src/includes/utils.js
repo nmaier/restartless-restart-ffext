@@ -20,6 +20,7 @@
  * Contributor(s):
  *   Edward Lee <edilee@mozilla.com>
  *   Erik Vold <erikvvold@gmail.com>
+ *   Nils Maier <maierman@web.de>
  *
  * Alternatively, the contents of this file may be used under the terms of
  * either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -34,6 +35,13 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+
+// make XHR available, if it isn't already
+if (!('XMLHttpRequest' in this)) {
+  this.XMLHttpRequest = Components.Constructor(
+    "@mozilla.org/xmlextras/xmlhttprequest;1",
+    "nsIXMLHttpRequest");
+}
 
 /**
  * Waits for a browser window to finish loading before running the callback
@@ -167,4 +175,72 @@ function unload(callback, container) {
       unloaders.splice(index, 1);
   }
   return removeUnloader;
+}
+
+/**
+ * Get a localized and/or formatted string
+ *
+ * @author Nils Maier
+ * @usage _('string')
+ * @usage _('formated', param1, ...)
+ * @param [String] id
+ * @param [String] ...
+ * @return [String] localized string
+ */
+function _() {
+  if (arguments.length == 0) {
+    return null;
+  }
+  if (arguments.length == 1) {
+    return _.strings.GetStringFromName(arguments[0]);
+  }
+  let args = Array.map(arguments, function(e) e);
+  let id = args.shift();
+  return _.strings.formatStringFromName(id, args, args.length);
+};
+
+/**
+ * Loads the string bundle according to user locale
+ * and chrome.manifest.
+ *
+ * @author Nils Maier
+ * @param [string] resource: file name of the l10n resource to load
+ * @param [Addon] addon: Addon data from AddonManager
+ * @param [function] next: Next function to call
+ */
+_.init = function _init(resource, addon, next) {
+  let manifest = new XMLHttpRequest();
+  manifest.onload = function() {
+    // get supported locales
+    manifest = manifest.responseText
+      .split(/\n/g)
+      .filter(function(line) /^locale/.test(line))
+      .map(function(line) line.split(/\s/g)[2]);
+
+    // get selected locale
+    let xr = Cc["@mozilla.org/chrome/chrome-registry;1"]
+      .getService(Ci.nsIXULChromeRegistry);
+    let locale = xr.getSelectedLocale("global");
+
+    // exact match?
+    let idx = manifest.indexOf(locale);
+
+    if (idx < 0) {
+      // best match?
+      idx = manifest.map(function(l) l.split("-")[0]).indexOf(locale.split("-")[0]);
+    }
+
+    // load the string bundle
+    let sb = addon.getResourceURI(
+      "locale/"
+      + manifest[Math.max(0, idx)]
+      + '/' + resource).spec;
+    _.strings = Services.strings.createBundle(sb);
+
+    // call next
+    next && next();
+  };
+  manifest.overrideMimeType('text/plain');
+  manifest.open("GET", addon.getResourceURI("chrome.manifest").spec);
+  manifest.send();
 }
